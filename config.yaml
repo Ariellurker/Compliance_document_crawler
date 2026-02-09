@@ -1,0 +1,178 @@
+excel_path: "f:/SDXH_Work_Proj/auto_detect_download/爬取信息总汇/需爬虫的网址汇总.xlsx"
+download_root: "f:/SDXH_Work_Proj/auto_detect_download/downloads"
+request_timeout_seconds: 20
+user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36"
+dry_run: false
+log_path: "f:/SDXH_Work_Proj/auto_detect_download/data/run.log"
+index_path: "f:/SDXH_Work_Proj/auto_detect_download/data/download_index.json"
+failures_path: "f:/SDXH_Work_Proj/auto_detect_download/data/failures.csv"
+success_path: "f:/SDXH_Work_Proj/auto_detect_download/data/success.csv"
+
+# 可选：为特定站点提供搜索模板或特殊规则
+site_overrides:
+  "www.amac.org.cn":
+    adapter: "playwright"
+    search_url: "https://www.amac.org.cn/index/qzss/?key={query}"
+    query_encoding: "single"
+    fetch_mode: "playwright"
+    selectors:
+      item: "div.rightBox ul.textList li"
+      title: "div.text h3 a"
+      date: "div.date"
+      wait_for: "div.rightBox ul.textList li"
+    detail_date:
+      enabled: true
+    detail_page:
+      enabled: true
+      fetch_mode: "playwright"
+      title_selectors:
+        - "h1"
+        - "title"
+      attachment_selectors:
+        - "a[href]"
+      attachment_text_keywords:
+        - "附件"
+      attachment_extensions:
+        - "pdf"
+        - "doc"
+        - "docx"
+        - "xls"
+        - "xlsx"
+        - "zip"
+        - "rar"
+        - "7z"
+        - "csv"
+        - "ppt"
+        - "pptx"
+  "www.csrc.gov.cn":
+    adapter: "playwright"
+    search_url: "https://www.csrc.gov.cn/guestweb4/s?searchWord={query}&column=%25E5%2585%25A8%25E9%2583%25A8&pageSize=10&pageNum=0&siteCode=bm56000001&sonSiteCode=&checkHandle=1&searchSource=0&govWorkBean=%257B%257D&sonSiteCode=&areaSearchFlag=-1&secondSearchWords=&topical=&docName=&label=&countKey=0&uc=0&left_right_index=0&searchBoxSettingsIndex=&manualWord={query}&orderBy=1&startTime=&endTime=&timeStamp=0&strFileType=&wordPlace=0"
+    query_encoding: "double"
+    fetch_mode: "playwright"
+    selectors:
+      item: "div.wordGuide"
+      title: "a"
+      date: "p.time"
+      wait_for: "div.wordGuide"
+    date_from_item: false
+    detail_date:
+      enabled: true
+    detail_page:
+      enabled: true
+      fetch_mode: "playwright"
+      title_selectors:
+        - "h1"
+        - "title"
+      attachment_selectors:
+        - "a[href]"
+      attachment_extensions:
+        - "pdf"
+        - "doc"
+        - "docx"
+        - "xls"
+        - "xlsx"
+        - "zip"
+        - "rar"
+        - "7z"
+        - "csv"
+        - "ppt"
+        - "pptx"
+  "www.sac.net.cn":
+    adapter: "playwright"
+    search_url: "https://www.sac.net.cn/was5/web/search?channelid=228163&searchword={query}"
+    query_encoding: "single"
+    fetch_mode: "requests"
+    selectors:
+      item: "td.searchresult ol li"
+      title: "a"
+      date: "div.pubtime"
+      wait_for: "td.searchresult ol li"
+    date_from_item: false
+    detail_date:
+      enabled: true
+    detail_page:
+      enabled: true
+      fetch_mode: "requests"
+      title_selectors:
+        - "h1"
+        - "title"
+      attachment_selectors:
+        - "a[href]"
+      attachment_extensions:
+        - "pdf"
+        - "doc"
+        - "docx"
+        - "xls"
+        - "xlsx"
+        - "zip"
+        - "rar"
+        - "7z"
+        - "csv"
+        - "ppt"
+        - "pptx"
+  "sousuo.www.gov.cn":
+    adapter: "playwright"
+    search_url: "https://sousuo.www.gov.cn/sousuo/search.shtml?code=17da70961a7&dataTypeId=107&searchWord={query}"
+    query_encoding: "single"
+    fetch_mode: "playwright"
+    selectors:
+      item: "div.item"
+      title: "a"
+      date: "span.sourceTime"
+      wait_for: "div.item"
+    date_from_item: false
+    detail_date:
+      enabled: true
+    detail_page:
+      enabled: true
+      fetch_mode: "playwright"
+      title_selectors:
+        - "h1"
+        - "title"
+      attachment_selectors:
+        - "a[href]"
+      attachment_extensions:
+        - "pdf"
+        - "doc"
+        - "docx"
+        - "xls"
+        - "xlsx"
+        - "zip"
+        - "rar"
+        - "7z"
+        - "csv"
+        - "ppt"
+        - "pptx"
+  "www.gov.cn":
+    adapter: "playwright"
+    search_url: "https://sousuo.www.gov.cn/sousuo/search.shtml?code=17da70961a7&dataTypeId=107&searchWord={query}"
+    query_encoding: "single"
+    fetch_mode: "playwright"
+    selectors:
+      item: "div.item"
+      title: "a"
+      date: "span.sourceTime"
+      wait_for: "div.item"
+    date_from_item: false
+    detail_date:
+      enabled: true
+    detail_page:
+      enabled: true
+      fetch_mode: "playwright"
+      title_selectors:
+        - "h1"
+        - "title"
+      attachment_selectors:
+        - "a[href]"
+      attachment_extensions:
+        - "pdf"
+        - "doc"
+        - "docx"
+        - "xls"
+        - "xlsx"
+        - "zip"
+        - "rar"
+        - "7z"
+        - "csv"
+        - "ppt"
+        - "pptx"
