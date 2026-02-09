@@ -8,12 +8,15 @@ from .playwright_rule import PlaywrightRuleAdapter
 
 class SiteRegistry:
     def __init__(self):
+        """初始化适配器注册表。"""
         self._adapters: Dict[str, SiteAdapter] = {}
 
     def register(self, domain: str, adapter: SiteAdapter) -> None:
+        """注册指定域名适配器。"""
         self._adapters[domain.lower()] = adapter
 
     def get(self, url: str) -> Optional[SiteAdapter]:
+        """按 URL 获取已注册的适配器。"""
         domain = urlparse(url).netloc.lower()
         if domain in self._adapters:
             return self._adapters[domain]
@@ -28,6 +31,7 @@ class SiteRegistry:
         adapter_name: Optional[str] = None,
         adapter_config: Optional[Dict[str, Any]] = None,
     ) -> SiteAdapter:
+        """确保域名有适配器，必要时创建通用适配器。"""
         domain = urlparse(url).netloc.lower()
         if domain in self._adapters:
             return self._adapters[domain]

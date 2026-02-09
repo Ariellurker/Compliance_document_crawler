@@ -37,6 +37,7 @@ DEFAULT_ATTACHMENT_SELECTORS = ["a[href]"]
 
 
 def _encode_query(value: str, mode: str) -> str:
+    """按配置编码搜索关键词。"""
     if mode == "none":
         return value
     if mode == "double":
@@ -45,6 +46,7 @@ def _encode_query(value: str, mode: str) -> str:
 
 
 def _compile_regexes(values: Iterable[str]) -> List[re.Pattern]:
+    """编译正则规则并忽略无效项。"""
     compiled: List[re.Pattern] = []
     for item in values:
         try:
@@ -55,6 +57,7 @@ def _compile_regexes(values: Iterable[str]) -> List[re.Pattern]:
 
 
 def _normalize_selectors(values: Any, fallback: List[str]) -> List[str]:
+    """规范化 CSS 选择器配置。"""
     if not values:
         return list(fallback)
     if isinstance(values, str):
@@ -63,6 +66,7 @@ def _normalize_selectors(values: Any, fallback: List[str]) -> List[str]:
 
 
 def _apply_response_encoding(resp: requests.Response) -> None:
+    """尽可能修正响应编码以便解析。"""
     encoding = (resp.encoding or "").lower()
     if not encoding or encoding in ("iso-8859-1", "latin-1"):
         apparent = getattr(resp, "apparent_encoding", None)
@@ -71,6 +75,7 @@ def _apply_response_encoding(resp: requests.Response) -> None:
 
 
 def _normalize_extensions(values: Optional[Iterable[str]]) -> set:
+    """规范化附件后缀集合。"""
     items = list(values or [])
     if not items:
         items = DEFAULT_ATTACHMENT_EXTENSIONS
@@ -83,12 +88,14 @@ def _normalize_extensions(values: Optional[Iterable[str]]) -> set:
 
 
 def _normalize_text_keywords(values: Optional[Iterable[str]]) -> List[str]:
+    """规范化附件文本关键词列表。"""
     if not values:
         return []
     return [str(item).strip().lower() for item in values if str(item).strip()]
 
 
 def _is_attachment_url(url: str, extensions: set) -> bool:
+    """判断链接是否为附件链接。"""
     if not url:
         return False
     lowered = url.lower()
@@ -105,6 +112,7 @@ def _is_attachment_url(url: str, extensions: set) -> bool:
 
 
 def _clean_attachment_name(text: str) -> str:
+    """清理附件名称前缀与多余空白。"""
     if not text:
         return ""
     cleaned = re.sub(r"^\s*附件\s*\d*\s*[:：]?\s*", "", text.strip())
@@ -112,6 +120,7 @@ def _clean_attachment_name(text: str) -> str:
 
 
 def _extract_title(soup: BeautifulSoup, selectors: List[str]) -> Optional[str]:
+    """从页面中提取标题。"""
     for selector in selectors:
         node = soup.select_one(selector)
         if not node:
@@ -138,6 +147,7 @@ def _extract_attachments(
     extensions: Optional[Iterable[str]],
     text_keywords: Optional[Iterable[str]] = None,
 ) -> List[str]:
+    """从详情页中提取附件链接与名称。"""
     normalized_exts = _normalize_extensions(extensions)
     normalized_keywords = _normalize_text_keywords(text_keywords)
     results: List[str] = []
@@ -172,6 +182,7 @@ def _extract_attachments(
 
 
 def _extract_detail_date(html: str, selectors: List[str], regexes: List[re.Pattern]) -> Optional[Any]:
+    """从详情页 HTML 中提取发布日期。"""
     soup = BeautifulSoup(html, "html.parser")
     for selector in selectors:
         node = soup.select_one(selector)
@@ -205,6 +216,7 @@ class PlaywrightRuleAdapter(SiteAdapter):
         search_url_template: Optional[str] = None,
         rules: Optional[Dict[str, Any]] = None,
     ):
+        """初始化基于规则的 Playwright 适配器。"""
         super().__init__(base_url, timeout_seconds, user_agent)
         self.rules = rules or {}
         self.search_url_template = self.rules.get("search_url") or search_url_template
@@ -219,6 +231,7 @@ class PlaywrightRuleAdapter(SiteAdapter):
         self.detail_page_rules = self.rules.get("detail_page", {}) or {}
 
     def _build_url(self, file_name: str) -> str:
+        """构建搜索 URL。"""
         template = self.search_url_template or self.base_url
         if "{query}" not in template:
             return template
@@ -226,6 +239,7 @@ class PlaywrightRuleAdapter(SiteAdapter):
         return template.format(query=query)
 
     def _fetch_search_html(self, url: str) -> str:
+        """获取搜索页 HTML（支持 requests/playwright）。"""
         if self.fetch_mode == "requests":
             headers = {"User-Agent": self.user_agent}
             resp = requests.get(url, headers=headers, timeout=self.timeout_seconds)
@@ -250,12 +264,14 @@ class PlaywrightRuleAdapter(SiteAdapter):
             return html
 
     def _parse_items(self, soup: BeautifulSoup) -> Iterable[Any]:
+        """解析搜索列表项节点。"""
         item_selector = self.selectors.get("item")
         if item_selector:
             return soup.select(item_selector)
         return soup.find_all("a", href=True)
 
     def _parse_results(self, html: str, keyword: str, base_url: str) -> List[SearchResult]:
+        """从搜索页 HTML 解析候选结果。"""
         soup = BeautifulSoup(html, "html.parser")
         title_selector = self.selectors.get("title", "a")
         date_selector = self.selectors.get("date")
@@ -284,6 +300,7 @@ class PlaywrightRuleAdapter(SiteAdapter):
         return results
 
     def _fetch_detail_html(self, url: str, fetch_mode: str) -> Optional[str]:
+        """获取详情页 HTML（支持 requests/playwright）。"""
         if fetch_mode == "playwright":
             timeout_ms = self.timeout_seconds * 1000
             with sync_playwright() as playwright:
@@ -305,6 +322,7 @@ class PlaywrightRuleAdapter(SiteAdapter):
         return resp.text
 
     def _fill_detail_date(self, result: SearchResult) -> None:
+        """补充详情页发布日期到结果。"""
         if result.publish_time or not self.detail_enabled:
             return
         if result.url.lower().endswith(".pdf"):
@@ -320,6 +338,7 @@ class PlaywrightRuleAdapter(SiteAdapter):
             result.publish_time = detail_date
 
     def search(self, file_name: str) -> Iterable[SearchResult]:
+        """执行搜索并按需补全日期。"""
         url = self._build_url(file_name)
         html = self._fetch_search_html(url)
         results = self._parse_results(html, file_name, url)
@@ -331,6 +350,7 @@ class PlaywrightRuleAdapter(SiteAdapter):
         return results
 
     def fetch_detail_info(self, result: SearchResult) -> DetailInfo:
+        """获取详情页内容及附件列表。"""
         rules = self.detail_page_rules or {}
         enabled = rules.get("enabled", True)
         if not enabled:

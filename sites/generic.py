@@ -35,10 +35,12 @@ DEFAULT_ATTACHMENT_SELECTORS = ["a[href]"]
 
 
 def _normalize_text(value: str) -> str:
+    """去除空白并小写化文本用于匹配。"""
     return re.sub(r"\s+", "", value or "").lower()
 
 
 def _matches_keywords(text: str, keyword: str) -> bool:
+    """判断文本是否包含关键词（忽略空白与大小写）。"""
     normalized_text = _normalize_text(text)
     normalized_keyword = _normalize_text(keyword)
     if not normalized_keyword:
@@ -47,6 +49,7 @@ def _matches_keywords(text: str, keyword: str) -> bool:
 
 
 def _extract_dates(text: str) -> List[datetime]:
+    """从文本中提取所有日期。"""
     dates: List[datetime] = []
     for regex in DATE_REGEXES:
         for match in regex.findall(text):
@@ -59,6 +62,7 @@ def _extract_dates(text: str) -> List[datetime]:
 
 
 def _best_date(text: str) -> Optional[datetime]:
+    """从文本中挑选最新日期。"""
     dates = _extract_dates(text)
     if not dates:
         return None
@@ -66,6 +70,7 @@ def _best_date(text: str) -> Optional[datetime]:
 
 
 def _normalize_selectors(values: Any, fallback: List[str]) -> List[str]:
+    """规范化 CSS 选择器配置。"""
     if not values:
         return list(fallback)
     if isinstance(values, str):
@@ -74,6 +79,7 @@ def _normalize_selectors(values: Any, fallback: List[str]) -> List[str]:
 
 
 def _apply_response_encoding(resp: requests.Response) -> None:
+    """尽可能修正响应编码以便解析。"""
     encoding = (resp.encoding or "").lower()
     if not encoding or encoding in ("iso-8859-1", "latin-1"):
         apparent = getattr(resp, "apparent_encoding", None)
@@ -82,6 +88,7 @@ def _apply_response_encoding(resp: requests.Response) -> None:
 
 
 def _normalize_extensions(values: Optional[Iterable[str]]) -> set:
+    """规范化附件后缀集合。"""
     items = list(values or [])
     if not items:
         items = DEFAULT_ATTACHMENT_EXTENSIONS
@@ -94,12 +101,14 @@ def _normalize_extensions(values: Optional[Iterable[str]]) -> set:
 
 
 def _normalize_text_keywords(values: Optional[Iterable[str]]) -> List[str]:
+    """规范化附件文本关键词列表。"""
     if not values:
         return []
     return [str(item).strip().lower() for item in values if str(item).strip()]
 
 
 def _is_attachment_url(url: str, extensions: set) -> bool:
+    """判断链接是否为附件链接。"""
     if not url:
         return False
     lowered = url.lower()
@@ -116,6 +125,7 @@ def _is_attachment_url(url: str, extensions: set) -> bool:
 
 
 def _clean_attachment_name(text: str) -> str:
+    """清理附件名称前缀与多余空白。"""
     if not text:
         return ""
     cleaned = re.sub(r"^\s*附件\s*\d*\s*[:：]?\s*", "", text.strip())
@@ -123,6 +133,7 @@ def _clean_attachment_name(text: str) -> str:
 
 
 def _extract_title(soup: BeautifulSoup, selectors: List[str]) -> Optional[str]:
+    """从页面中提取标题。"""
     for selector in selectors:
         node = soup.select_one(selector)
         if not node:
@@ -149,6 +160,7 @@ def _extract_attachments(
     extensions: Optional[Iterable[str]],
     text_keywords: Optional[Iterable[str]] = None,
 ) -> List[str]:
+    """从详情页中提取附件链接与名称。"""
     normalized_exts = _normalize_extensions(extensions)
     normalized_keywords = _normalize_text_keywords(text_keywords)
     results: List[str] = []
@@ -191,12 +203,14 @@ class GenericHtmlAdapter(SiteAdapter):
         search_url_template: Optional[str] = None,
         rules: Optional[Dict[str, Any]] = None,
     ):
+        """初始化通用 HTML 适配器。"""
         super().__init__(base_url, timeout_seconds, user_agent)
         self.search_url_template = search_url_template
         self.rules = rules or {}
         self.detail_page_rules = self.rules.get("detail_page", {}) or {}
 
     def _fetch_detail_html(self, url: str, fetch_mode: str) -> Optional[str]:
+        """获取详情页 HTML（支持 requests/playwright）。"""
         if fetch_mode == "playwright":
             timeout_ms = self.timeout_seconds * 1000
             with sync_playwright() as playwright:
@@ -218,6 +232,7 @@ class GenericHtmlAdapter(SiteAdapter):
         return resp.text
 
     def _build_url(self, file_name: str) -> str:
+        """构建搜索 URL。"""
         if self.search_url_template:
             return self.search_url_template.format(query=quote_plus(file_name))
         if "{query}" in self.base_url:
@@ -225,6 +240,7 @@ class GenericHtmlAdapter(SiteAdapter):
         return self.base_url
 
     def search(self, file_name: str) -> Iterable[SearchResult]:
+        """执行搜索并解析候选结果。"""
         url = self._build_url(file_name)
         headers = {"User-Agent": self.user_agent}
         resp = requests.get(url, headers=headers, timeout=self.timeout_seconds)
@@ -250,6 +266,7 @@ class GenericHtmlAdapter(SiteAdapter):
         return results
 
     def fetch_detail_info(self, result: SearchResult) -> DetailInfo:
+        """获取详情页内容及附件列表。"""
         rules = self.detail_page_rules or {}
         enabled = rules.get("enabled", True)
         if not enabled:

@@ -26,11 +26,13 @@ class RowItem:
 
 
 def load_config(path: str) -> Dict[str, Any]:
+    """读取并解析 YAML 配置文件。"""
     with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
 def setup_logging(log_path: str) -> None:
+    """初始化日志输出与日志文件目录。"""
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     logging.basicConfig(
         level=logging.INFO,
@@ -43,6 +45,7 @@ def setup_logging(log_path: str) -> None:
 
 
 def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """统一 Excel 列名为：文件名/网址/发布时间。"""
     columns = {c.strip(): c for c in df.columns}
     file_name_col = None
     url_col = None
@@ -68,6 +71,7 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def parse_excel_date(value: Any) -> Optional[datetime]:
+    """解析 Excel 单元格日期为 datetime。"""
     if value is None or (isinstance(value, float) and pd.isna(value)):
         return None
     if isinstance(value, datetime):
@@ -84,6 +88,7 @@ def parse_excel_date(value: Any) -> Optional[datetime]:
 
 
 def read_rows(excel_path: str) -> List[RowItem]:
+    """读取 Excel 行并转换为 RowItem 列表。"""
     df = pd.read_excel(excel_path, engine="openpyxl")
     df = normalize_columns(df)
     rows: List[RowItem] = []
@@ -99,6 +104,7 @@ def read_rows(excel_path: str) -> List[RowItem]:
 
 
 def ensure_index(path: str) -> Dict[str, Any]:
+    """读取下载索引，若不存在则返回空结构。"""
     if not os.path.exists(path):
         return {"items": []}
     with open(path, "r", encoding="utf-8") as f:
@@ -106,22 +112,26 @@ def ensure_index(path: str) -> Dict[str, Any]:
 
 
 def save_index(path: str, index_data: Dict[str, Any]) -> None:
+    """保存下载索引到 JSON 文件。"""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(index_data, f, ensure_ascii=False, indent=2)
 
 
 def safe_filename(value: str) -> str:
+    """清理不合法文件名字符并回退默认名。"""
     return "".join(ch for ch in value if ch not in "\\/:*?\"<>|").strip() or "file"
 
 
 def extract_filename_from_url(url: str) -> Optional[str]:
+    """从 URL 路径中提取文件名。"""
     parsed = urlparse(url)
     name = os.path.basename(parsed.path)
     return name or None
 
 
 def sha256_file(path: str) -> str:
+    """计算文件的 SHA256 哈希。"""
     hasher = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(8192), b""):
@@ -130,6 +140,7 @@ def sha256_file(path: str) -> str:
 
 
 def ensure_unique_path(path: str) -> str:
+    """若目标路径已存在，生成不冲突的新路径。"""
     if not os.path.exists(path):
         return path
     base, ext = os.path.splitext(path)
@@ -142,6 +153,7 @@ def ensure_unique_path(path: str) -> str:
 
 
 def build_file_name_from_url(url: str, fallback_prefix: str, index: int) -> str:
+    """根据 URL 或兜底前缀生成附件文件名。"""
     name = extract_filename_from_url(url)
     if name:
         return safe_filename(name)
@@ -152,6 +164,7 @@ def build_file_name_from_url(url: str, fallback_prefix: str, index: int) -> str:
 
 
 def append_csv(path: str, row: Dict[str, Any]) -> None:
+    """向 CSV 追加一行（必要时写表头）。"""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     file_exists = os.path.exists(path)
     with open(path, "a", newline="", encoding="utf-8") as f:
@@ -170,6 +183,7 @@ def download_result(
     timeout_seconds: int,
     user_agent: str,
 ) -> Optional[Tuple[str, Optional[str]]]:
+    """下载搜索结果与附件，并写入索引。"""
     existing_urls = {item.get("url") for item in index_data.get("items", [])}
     existing_hashes = {item.get("sha256") for item in index_data.get("items", [])}
     if result.url in existing_urls:
@@ -185,6 +199,7 @@ def download_result(
     headers = {"User-Agent": user_agent}
 
     def record_file(url: str, path: str, file_hash: str, kind: str) -> None:
+        """记录下载条目并更新去重集合。"""
         index_data.setdefault("items", []).append(
             {
                 "title": detail_info.title or result.title,
@@ -200,6 +215,7 @@ def download_result(
         existing_hashes.add(file_hash)
 
     def download_url(url: str, target_path: str, kind: str) -> Optional[str]:
+        """下载指定 URL 到本地路径并去重。"""
         if url in existing_urls:
             logging.info("已下载过，跳过：%s", url)
             return None
@@ -219,6 +235,7 @@ def download_result(
         return target_path
 
     def write_html(html: str, target_path: str, url: str) -> Optional[str]:
+        """写入详情页 HTML 并去重。"""
         target_path = ensure_unique_path(target_path)
         with open(target_path, "w", encoding="utf-8") as f:
             f.write(html)
@@ -283,6 +300,7 @@ def download_result(
 
 
 def filter_newer_results(results: Iterable[SearchResult], since: datetime) -> List[SearchResult]:
+    """过滤出发布时间晚于给定时间的结果。"""
     filtered: List[SearchResult] = []
     for item in results:
         if not item.publish_time:
@@ -293,12 +311,14 @@ def filter_newer_results(results: Iterable[SearchResult], since: datetime) -> Li
 
 
 def format_time(value: Optional[datetime]) -> str:
+    """将时间格式化为统一字符串。"""
     if not value:
         return "None"
     return value.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def run(config_path: str, dry_run: Optional[bool]) -> None:
+    """执行主流程：搜索、筛选、下载并记录。"""
     config = load_config(config_path)
     dry_run = config.get("dry_run") if dry_run is None else dry_run
 
@@ -427,6 +447,7 @@ def run(config_path: str, dry_run: Optional[bool]) -> None:
 
 
 def main() -> None:
+    """命令行入口。"""
     parser = argparse.ArgumentParser(description="自动检测并下载网站更新文件")
     parser.add_argument(
         "--config",
