@@ -1,3 +1,10 @@
+"""
+通用 HTML 站点适配器。
+
+使用 BeautifulSoup 解析静态 HTML，支持 requests 与 Playwright 两种抓取方式。
+提供关键词搜索、详情页标题/附件提取、日期正则匹配等能力。
+"""
+
 import os
 import re
 from datetime import datetime
@@ -11,11 +18,13 @@ from playwright.sync_api import sync_playwright
 
 from .base import DetailInfo, SearchResult, SiteAdapter
 
+# 用于从文本中匹配日期的正则表达式（支持 YYYY-MM-DD、YYYY年MM月DD日 等格式）
 DATE_REGEXES = [
     re.compile(r"\d{4}[./-]\d{1,2}[./-]\d{1,2}"),
     re.compile(r"\d{4}年\d{1,2}月\d{1,2}日"),
 ]
 
+# 默认识别为附件的文件扩展名（用于判断链接是否为可下载附件）
 DEFAULT_ATTACHMENT_EXTENSIONS = [
     "pdf",
     "doc",
@@ -30,7 +39,9 @@ DEFAULT_ATTACHMENT_EXTENSIONS = [
     "pptx",
 ]
 
+# 默认用于提取详情页标题的 CSS 选择器
 DEFAULT_TITLE_SELECTORS = ["h1", "title"]
+# 默认用于提取附件链接的 CSS 选择器
 DEFAULT_ATTACHMENT_SELECTORS = ["a[href]"]
 
 
@@ -197,11 +208,11 @@ def _extract_attachments(
 class GenericHtmlAdapter(SiteAdapter):
     def __init__(
         self,
-        base_url: str,
-        timeout_seconds: int,
-        user_agent: str,
-        search_url_template: Optional[str] = None,
-        rules: Optional[Dict[str, Any]] = None,
+        base_url: str,  # 站点基础 URL
+        timeout_seconds: int,  # 请求超时秒数
+        user_agent: str,  # HTTP User-Agent
+        search_url_template: Optional[str] = None,  # 搜索 URL 模板，含 {query} 占位符
+        rules: Optional[Dict[str, Any]] = None,  # 规则配置，含 detail_page 等
     ):
         """初始化通用 HTML 适配器。"""
         super().__init__(base_url, timeout_seconds, user_agent)

@@ -1,3 +1,13 @@
+"""
+主程序入口与核心流程。
+
+功能概要：
+- 读取 YAML 配置、Excel 需爬虫网址汇总
+- 初始化站点适配器注册表，按域名选择 GenericHtmlAdapter 或 PlaywrightRuleAdapter
+- 对每行执行搜索、筛选发布时间晚于文档时间的候选、下载详情页与附件
+- 维护下载索引 JSON 去重，记录成功/失败到 CSV
+"""
+
 import argparse
 import csv
 import hashlib
@@ -20,9 +30,11 @@ from sites.base import DetailInfo, SearchResult, SiteAdapter
 
 @dataclass
 class RowItem:
-    file_name: str
-    url: str
-    publish_time: datetime
+    """Excel 中一行的解析结果。"""
+
+    file_name: str  # 文件名/需搜索的关键词
+    url: str  # 目标网站地址
+    publish_time: datetime  # 文档中记录的发布时间，用于筛选更新
 
 
 def load_config(path: str) -> Dict[str, Any]:
@@ -175,13 +187,13 @@ def append_csv(path: str, row: Dict[str, Any]) -> None:
 
 
 def download_result(
-    result: SearchResult,
-    adapter: SiteAdapter,
-    download_root: str,
-    domain: str,
-    index_data: Dict[str, Any],
-    timeout_seconds: int,
-    user_agent: str,
+    result: SearchResult,  # 待下载的搜索结果
+    adapter: SiteAdapter,  # 站点适配器
+    download_root: str,  # 下载根目录
+    domain: str,  # 站点域名（用于分目录）
+    index_data: Dict[str, Any],  # 下载索引（用于去重）
+    timeout_seconds: int,  # 请求超时
+    user_agent: str,  # HTTP User-Agent
 ) -> Optional[Tuple[str, Optional[str]]]:
     """下载搜索结果与附件，并写入索引。"""
     existing_urls = {item.get("url") for item in index_data.get("items", [])}

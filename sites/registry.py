@@ -1,3 +1,9 @@
+"""
+站点适配器注册表。
+
+按域名管理 SiteAdapter 实例，支持注册与按需创建 GenericHtmlAdapter / PlaywrightRuleAdapter。
+"""
+
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
@@ -24,12 +30,12 @@ class SiteRegistry:
 
     def ensure_generic(
         self,
-        url: str,
-        timeout_seconds: int,
-        user_agent: str,
-        search_url_template: Optional[str] = None,
-        adapter_name: Optional[str] = None,
-        adapter_config: Optional[Dict[str, Any]] = None,
+        url: str,  # 目标站点 URL
+        timeout_seconds: int,  # 请求超时秒数
+        user_agent: str,  # HTTP User-Agent
+        search_url_template: Optional[str] = None,  # 搜索 URL 模板
+        adapter_name: Optional[str] = None,  # "playwright" 时使用 PlaywrightRuleAdapter，否则 GenericHtmlAdapter
+        adapter_config: Optional[Dict[str, Any]] = None,  # 适配器配置（rules 等）
     ) -> SiteAdapter:
         """确保域名有适配器，必要时创建通用适配器。"""
         domain = urlparse(url).netloc.lower()

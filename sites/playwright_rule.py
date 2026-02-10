@@ -1,3 +1,10 @@
+"""
+基于 Playwright 与规则配置的站点适配器。
+
+支持通过 config 指定选择器、搜索编码、抓取模式、详情页日期提取等。
+适用于需要 JS 渲染或结构较复杂的站点。
+"""
+
 import os
 import re
 from typing import Any, Dict, Iterable, List, Optional
@@ -13,11 +20,13 @@ from .base import DetailInfo, SearchResult, SiteAdapter
 from .generic import _best_date, _matches_keywords
 
 
+# 从详情页提取发布日期的默认正则（匹配 "发布日期：2024-01-01" 等）
 DEFAULT_DETAIL_REGEXES = [
     r"(?:发布日期|发布时间|日期)[：:\s]*([0-9]{4}[./-][0-9]{1,2}[./-][0-9]{1,2})",
     r"(?:发布日期|发布时间|日期)[：:\s]*([0-9]{4}年[0-9]{1,2}月[0-9]{1,2}日)",
 ]
 
+# 默认识别为附件的文件扩展名
 DEFAULT_ATTACHMENT_EXTENSIONS = [
     "pdf",
     "doc",
@@ -32,7 +41,9 @@ DEFAULT_ATTACHMENT_EXTENSIONS = [
     "pptx",
 ]
 
+# 默认标题选择器
 DEFAULT_TITLE_SELECTORS = ["h1", "title"]
+# 默认附件链接选择器
 DEFAULT_ATTACHMENT_SELECTORS = ["a[href]"]
 
 
@@ -210,11 +221,11 @@ def _extract_detail_date(html: str, selectors: List[str], regexes: List[re.Patte
 class PlaywrightRuleAdapter(SiteAdapter):
     def __init__(
         self,
-        base_url: str,
-        timeout_seconds: int,
-        user_agent: str,
-        search_url_template: Optional[str] = None,
-        rules: Optional[Dict[str, Any]] = None,
+        base_url: str,  # 站点基础 URL
+        timeout_seconds: int,  # 请求超时秒数
+        user_agent: str,  # HTTP User-Agent
+        search_url_template: Optional[str] = None,  # 搜索 URL 模板
+        rules: Optional[Dict[str, Any]] = None,  # 规则配置（selectors、fetch_mode、detail_date 等）
     ):
         """初始化基于规则的 Playwright 适配器。"""
         super().__init__(base_url, timeout_seconds, user_agent)
