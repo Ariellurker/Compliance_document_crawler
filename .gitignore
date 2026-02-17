@@ -2,3 +2,13 @@ data/
 downloads/
 __pycache__/
 *.pyc
+
+# Build/package outputs (local only)
+dist/
+build/launcher/
+build/main_worker/
+build/uploader_worker/
+build/
+
+# PyInstaller spec files
+*.spec

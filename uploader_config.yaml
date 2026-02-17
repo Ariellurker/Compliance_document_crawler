@@ -1,0 +1,9 @@
+# 本地文件同步到飞书知识库的配置（请勿提交含真实密钥的版本到版本库）
+# 路径可为相对路径（相对于程序运行目录）或绝对路径
+
+app_id: "cli_a9094ea2e4391cda"
+app_secret: "rKGveJt76bNEkWPXGEy2EfkxCSKHoQ02"
+space_id: "7603276829465709762"
+cloud_root_folder_token: "TwSofqIwmlv6yWdR7JLc9tsPnld"
+# 本地要同步的根目录，不填则默认为运行目录下的 downloads
+local_root_path: "./downloads"

@@ -14,6 +14,8 @@ import hashlib
 import json
 import logging
 import os
+import sys
+import traceback
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -22,10 +24,65 @@ from urllib.parse import urlparse
 import pandas as pd
 import requests
 import yaml
+from bs4 import BeautifulSoup, NavigableString, Tag
 from dateutil import parser as date_parser
 
 from sites import SiteRegistry
 from sites.base import DetailInfo, SearchResult, SiteAdapter
+
+
+def runtime_base_dir() -> str:
+    """返回运行目录（源码/打包环境均可用）。"""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def ensure_playwright_env(base_dir: str) -> None:
+    """若发布包内存在浏览器目录，设置环境变量供 Playwright 使用。"""
+    browser_dir = os.path.join(base_dir, "ms-playwright_browsers")
+    if os.path.isdir(browser_dir):
+        os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", browser_dir)
+
+
+def resolve_config_path(base_dir: str, path: str) -> str:
+    """相对路径则相对于 base_dir 解析，绝对路径原样返回。"""
+    if not path or not isinstance(path, str):
+        return path
+    path = path.strip()
+    if os.path.isabs(path):
+        return os.path.normpath(path)
+    return os.path.normpath(os.path.join(base_dir, path))
+
+
+def resolve_config_paths(config: Dict[str, Any], base_dir: str) -> None:
+    """将 config 中的路径项解析为绝对路径（相对路径相对于 base_dir）。"""
+    path_keys = (
+        "excel_path",
+        "download_root",
+        "log_path",
+        "index_path",
+        "failures_path",
+        "success_path",
+    )
+    for key in path_keys:
+        if key in config and config[key]:
+            config[key] = resolve_config_path(base_dir, config[key])
+
+
+def resolve_excel_input_path(base_dir: str, excel_path: str) -> str:
+    """兼容发布包中 Excel 放置位置差异，返回可用路径。"""
+    if excel_path and os.path.exists(excel_path):
+        return excel_path
+    if not excel_path:
+        return excel_path
+
+    # 常见场景：用户把 Excel 放在 release 根目录，而不是配置中的子目录。
+    fallback = os.path.join(base_dir, os.path.basename(excel_path))
+    if os.path.exists(fallback):
+        logging.warning("excel_path 不存在，改用根目录同名文件：%s", fallback)
+        return fallback
+    return excel_path
 
 
 @dataclass
@@ -186,6 +243,105 @@ def append_csv(path: str, row: Dict[str, Any]) -> None:
         writer.writerow(row)
 
 
+def _normalize_inline_text(value: str) -> str:
+    """压缩行内空白，避免 Markdown 产生多余空格。"""
+    return " ".join((value or "").split())
+
+
+def _inline_to_markdown(node: Any) -> str:
+    """将行内 HTML 节点转换为 Markdown。"""
+    if isinstance(node, NavigableString):
+        return _normalize_inline_text(str(node))
+    if not isinstance(node, Tag):
+        return ""
+    name = (node.name or "").lower()
+    if name == "br":
+        return "\n"
+    children_text = "".join(_inline_to_markdown(child) for child in node.children).strip()
+    if name in {"strong", "b"}:
+        return f"**{children_text}**" if children_text else ""
+    if name in {"em", "i"}:
+        return f"*{children_text}*" if children_text else ""
+    if name == "a":
+        href = (node.get("href") or "").strip()
+        label = children_text or _normalize_inline_text(node.get_text(" ", strip=True))
+        if href and label:
+            return f"[{label}]({href})"
+        return label
+    return children_text
+
+
+def _has_block_descendants(node: Tag) -> bool:
+    """判断节点是否包含块级子孙节点。"""
+    block_tags = {"h1", "h2", "h3", "h4", "h5", "h6", "p", "ul", "ol", "li", "table", "blockquote"}
+    for child in node.find_all(True):
+        if (child.name or "").lower() in block_tags:
+            return True
+    return False
+
+
+def _html_to_markdown(html: str) -> str:
+    """将 HTML 内容转换为 Markdown 文本。"""
+    soup = BeautifulSoup(html, "html.parser")
+    for junk in soup.select("script,style,noscript"):
+        junk.decompose()
+    root = soup.body or soup
+
+    lines: List[str] = []
+
+    def walk(node: Tag) -> None:
+        for child in node.children:
+            if isinstance(child, NavigableString):
+                text = _normalize_inline_text(str(child))
+                if text:
+                    lines.append(text)
+                continue
+            if not isinstance(child, Tag):
+                continue
+            name = (child.name or "").lower()
+            if name in {"script", "style", "noscript"}:
+                continue
+            if name in {"h1", "h2", "h3", "h4", "h5", "h6"}:
+                level = int(name[1])
+                text = _normalize_inline_text(child.get_text(" ", strip=True))
+                if text:
+                    lines.append(f"{'#' * level} {text}")
+                continue
+            if name == "p":
+                text = _inline_to_markdown(child).strip()
+                if text:
+                    lines.append(text)
+                continue
+            if name in {"ul", "ol"}:
+                ordered = name == "ol"
+                idx = 1
+                for li in child.find_all("li", recursive=False):
+                    item = _inline_to_markdown(li).strip()
+                    if not item:
+                        continue
+                    marker = f"{idx}. " if ordered else "- "
+                    lines.append(f"{marker}{item}")
+                    idx += 1
+                continue
+            if name == "blockquote":
+                text = _inline_to_markdown(child).strip()
+                if text:
+                    lines.append(f"> {text}")
+                continue
+            if name == "div":
+                if _has_block_descendants(child):
+                    walk(child)
+                else:
+                    text = _inline_to_markdown(child).strip()
+                    if text:
+                        lines.append(text)
+                continue
+            walk(child)
+
+    walk(root)
+    return "\n\n".join(line for line in lines if line).strip()
+
+
 def download_result(
     result: SearchResult,  # 待下载的搜索结果
     adapter: SiteAdapter,  # 站点适配器
@@ -259,15 +415,32 @@ def download_result(
         record_file(url, target_path, file_hash, "detail_html")
         return target_path
 
+    def write_markdown(html: str, html_path: str, url: str) -> Optional[str]:
+        """将 HTML 转换为 Markdown 并落盘。"""
+        markdown = _html_to_markdown(html)
+        if not markdown:
+            return None
+        md_path = ensure_unique_path(f"{os.path.splitext(html_path)[0]}.md")
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write(markdown)
+        file_hash = sha256_file(md_path)
+        if file_hash in existing_hashes:
+            os.remove(md_path)
+            logging.info("重复Markdown hash，已删除：%s", md_path)
+            return None
+        record_file(url, md_path, file_hash, "detail_markdown")
+        return md_path
+
     downloaded_any = False
     main_path: Optional[str] = None
 
     if detail_info.html:
-        detail_path = os.path.join(target_dir, "detail.html")
+        detail_path = os.path.join(target_dir, f"detail{folder_title}.html")
         saved_path = write_html(detail_info.html, detail_path, result.url)
         if saved_path:
+            md_saved_path = write_markdown(detail_info.html, saved_path, result.url)
             downloaded_any = True
-            main_path = saved_path
+            main_path = md_saved_path or saved_path
     else:
         file_name = extract_filename_from_url(result.url) or safe_filename(result.title)
         file_name = safe_filename(file_name)
@@ -332,6 +505,10 @@ def format_time(value: Optional[datetime]) -> str:
 def run(config_path: str, dry_run: Optional[bool]) -> None:
     """执行主流程：搜索、筛选、下载并记录。"""
     config = load_config(config_path)
+    base_dir = runtime_base_dir()
+    ensure_playwright_env(base_dir)
+    resolve_config_paths(config, base_dir)
+    config["excel_path"] = resolve_excel_input_path(base_dir, config.get("excel_path", ""))
     dry_run = config.get("dry_run") if dry_run is None else dry_run
 
     setup_logging(config["log_path"])
@@ -463,7 +640,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="自动检测并下载网站更新文件")
     parser.add_argument(
         "--config",
-        default="f:/SDXH_Work_Proj/auto_detect_download/config.yaml",
+        default=os.path.join(runtime_base_dir(), "config.yaml"),
         help="配置文件路径",
     )
     parser.add_argument(
@@ -476,4 +653,13 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        traceback.print_exc()
+        if getattr(sys, "frozen", False):
+            try:
+                input("\n程序异常退出，按回车键关闭窗口...")
+            except EOFError:
+                pass
+        raise

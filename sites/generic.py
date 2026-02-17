@@ -164,6 +164,77 @@ def _extract_title(soup: BeautifulSoup, selectors: List[str]) -> Optional[str]:
     return None
 
 
+def _extract_text_from_node(node: Any) -> str:
+    """提取节点文本，兼容 meta 等标签。"""
+    if not node:
+        return ""
+    if getattr(node, "name", "") == "meta":
+        return (node.get("content") or "").strip()
+    return node.get_text(" ", strip=True)
+
+
+def _build_trimmed_html(html: str, extract_rules: Dict[str, Any]) -> Optional[str]:
+    """根据配置裁剪详情页，仅保留标题、日期和正文。"""
+    if not extract_rules or not extract_rules.get("enabled", False):
+        return html
+
+    soup = BeautifulSoup(html, "html.parser")
+    fallback_to_original = extract_rules.get("fallback_to_original_on_empty", True)
+
+    title_selectors = _normalize_selectors(extract_rules.get("title_selectors"), DEFAULT_TITLE_SELECTORS)
+    title_text = _extract_title(soup, title_selectors) or ""
+
+    date_selectors = _normalize_selectors(extract_rules.get("date_selectors"), [])
+    date_text = ""
+    for selector in date_selectors:
+        node = soup.select_one(selector)
+        if not node:
+            continue
+        date_text = _extract_text_from_node(node)
+        if date_text:
+            break
+
+    body_selectors = _normalize_selectors(extract_rules.get("body_selectors"), [])
+    remove_selectors = _normalize_selectors(extract_rules.get("remove_selectors"), [])
+    body_blocks: List[str] = []
+    for selector in body_selectors:
+        nodes = soup.select(selector)
+        if not nodes:
+            continue
+        for node in nodes:
+            fragment = BeautifulSoup(str(node), "html.parser")
+            for remove_selector in remove_selectors:
+                for remove_node in fragment.select(remove_selector):
+                    remove_node.decompose()
+            rendered = str(fragment).strip()
+            if rendered:
+                body_blocks.append(rendered)
+        if body_blocks:
+            break
+
+    if not body_blocks:
+        return html if fallback_to_original else None
+
+    out = BeautifulSoup("<html><head><meta charset='utf-8'/></head><body></body></html>", "html.parser")
+    if title_text:
+        title_tag = out.new_tag("h1")
+        title_tag.string = title_text
+        out.body.append(title_tag)
+    if date_text:
+        date_tag = out.new_tag("div")
+        date_tag["class"] = ["publish-date"]
+        date_tag.string = date_text
+        out.body.append(date_tag)
+    content_tag = out.new_tag("div")
+    content_tag["class"] = ["content"]
+    for block in body_blocks:
+        block_soup = BeautifulSoup(block, "html.parser")
+        for child in list(block_soup.contents):
+            content_tag.append(child)
+    out.body.append(content_tag)
+    return str(out)
+
+
 def _extract_attachments(
     soup: BeautifulSoup,
     base_url: str,
@@ -305,4 +376,5 @@ class GenericHtmlAdapter(SiteAdapter):
             extensions=extensions,
             text_keywords=rules.get("attachment_text_keywords"),
         )
-        return DetailInfo(title=title, html=html, attachments=attachments)
+        trimmed_html = _build_trimmed_html(html, rules.get("content_extract", {}) or {})
+        return DetailInfo(title=title, html=trimmed_html, attachments=attachments)

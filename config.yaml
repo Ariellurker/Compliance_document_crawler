@@ -1,38 +1,78 @@
-excel_path: "f:/SDXH_Work_Proj/auto_detect_download/爬取信息总汇/需爬虫的网址汇总.xlsx"
-download_root: "f:/SDXH_Work_Proj/auto_detect_download/downloads"
-request_timeout_seconds: 20
-user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36"
-dry_run: false
-log_path: "f:/SDXH_Work_Proj/auto_detect_download/data/run.log"
-index_path: "f:/SDXH_Work_Proj/auto_detect_download/data/download_index.json"
-failures_path: "f:/SDXH_Work_Proj/auto_detect_download/data/failures.csv"
-success_path: "f:/SDXH_Work_Proj/auto_detect_download/data/success.csv"
+# ============================== 使用说明（请先阅读） ==============================
+# 1) 本文件用于控制主程序抓取流程、日志输出、索引记录、以及不同站点的差异化规则。
+# 2) 路径可使用相对路径（相对于程序运行目录）或绝对路径；Windows 下建议使用 "/"，避免转义问题。
+# 3) search_url 中必须包含 {query} 占位符，程序会自动替换为关键词。
+# 4) query_encoding:
+#    - single: 对关键词做一次 URL 编码（大多数站点）
+#    - double: 对关键词做两次 URL 编码（部分站点的历史接口）
+# 5) fetch_mode:
+#    - requests: 静态页面优先，速度快、资源占用低
+#    - playwright: 动态页面/反爬较强页面，兼容性更高
+# 6) selectors 使用 CSS 选择器；若页面结构变更，需优先更新 selectors。
+# 7) detail_page.enabled=true 时，会进入详情页二次解析标题、日期、附件链接。
+# 8) attachment_extensions 仅写后缀名，不要带 "."，如 "pdf"、"docx"。
+# 9) 若站点不需要某个可选字段（例如 attachment_text_keywords），可省略。
 
-# 可选：为特定站点提供搜索模板或特殊规则
+# Excel 输入文件路径：包含待检索关键词或网址清单（相对路径相对于程序运行目录）
+excel_path: "./爬取信息总汇/需爬虫的网址汇总.xlsx"
+# 下载根目录：抓取到的文件会按策略保存到此目录
+download_root: "./downloads"
+# 全局请求超时时间（秒）：requests/playwright 获取页面时的超时上限
+request_timeout_seconds: 20
+# 全局 User-Agent：模拟浏览器访问，降低被拦截概率
+user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36"
+# 演练模式：true=只跑流程不落盘下载，false=正常执行下载与写入
+dry_run: false
+# 运行日志路径：记录运行明细与错误堆栈
+log_path: "./data/run.log"
+# 下载索引路径：记录已处理/已下载项目，避免重复下载
+index_path: "./data/download_index.json"
+# 失败记录路径：保存失败任务（便于重试与排查）
+failures_path: "./data/failures.csv"
+# 成功记录路径：保存成功任务与结果信息
+success_path: "./data/success.csv"
+
+# 站点覆盖配置：按域名定义差异化抓取规则（可选）
 site_overrides:
+  # ------------------------------ 中国证券投资基金业协会 ------------------------------
   "www.amac.org.cn":
+    # 站点适配器类型：当前站点使用 playwright 适配逻辑
     adapter: "playwright"
+    # 搜索地址模板：必须含 {query} 占位符
     search_url: "https://www.amac.org.cn/index/qzss/?key={query}"
+    # 查询词编码方式：single=单次 URL 编码
     query_encoding: "single"
+    # 列表页抓取方式：playwright 适用于动态渲染页面
     fetch_mode: "playwright"
     selectors:
+      # 列表项选择器：每个命中的搜索结果容器
       item: "div.rightBox ul.textList li"
+      # 标题链接选择器：用于提取标题文本与详情页 URL
       title: "div.text h3 a"
+      # 日期选择器：用于提取发布时间（若列表页可直接拿到）
       date: "div.date"
+      # 等待元素选择器：页面加载完成判定依据
       wait_for: "div.rightBox ul.textList li"
     detail_date:
+      # 是否启用“详情页日期解析”：true 时若列表日期不可靠会到详情页补提取
       enabled: true
     detail_page:
+      # 是否启用详情页抓取：true 时进入详情页解析附件
       enabled: true
+      # 详情页抓取方式：可与列表页不同
       fetch_mode: "playwright"
       title_selectors:
+        # 详情页标题候选选择器（按顺序尝试）
         - "h1"
         - "title"
       attachment_selectors:
+        # 附件链接候选选择器（一般保留 a[href]）
         - "a[href]"
       attachment_text_keywords:
+        # 附件文本关键词过滤：仅匹配文本中包含该词的链接（可选）
         - "附件"
       attachment_extensions:
+        # 附件后缀白名单（不带点）
         - "pdf"
         - "doc"
         - "docx"
@@ -44,28 +84,66 @@ site_overrides:
         - "csv"
         - "ppt"
         - "pptx"
+      content_extract:
+        # 启用详情页正文裁剪：仅保留标题、日期、正文
+        enabled: true
+        # 裁剪失败时回退原始整页 HTML，避免丢失内容
+        fallback_to_original_on_empty: true
+        title_selectors:
+          - "div.title h3"
+          - "h1"
+          - "title"
+        date_selectors:
+          - "div.title .job-date"
+        body_selectors:
+          - "div.content .TRS_Editor"
+        remove_selectors:
+          - "script"
+          - "style"
+          - ".attachment-down"
+          - ".mod-nextnews"
+
+  # ----------------------------------- 中国证监会 -----------------------------------
   "www.csrc.gov.cn":
+    # 站点适配器类型
     adapter: "playwright"
+    # 搜索地址模板：包含多个平台参数与 {query} 占位符
     search_url: "https://www.csrc.gov.cn/guestweb4/s?searchWord={query}&column=%25E5%2585%25A8%25E9%2583%25A8&pageSize=10&pageNum=0&siteCode=bm56000001&sonSiteCode=&checkHandle=1&searchSource=0&govWorkBean=%257B%257D&sonSiteCode=&areaSearchFlag=-1&secondSearchWords=&topical=&docName=&label=&countKey=0&uc=0&left_right_index=0&searchBoxSettingsIndex=&manualWord={query}&orderBy=1&startTime=&endTime=&timeStamp=0&strFileType=&wordPlace=0"
+    # 查询词编码方式：double=双重编码（该站点接口需要）
     query_encoding: "double"
+    # 列表页抓取方式
     fetch_mode: "playwright"
+    # 仅标题匹配关键词：true 可减少正文误匹配
+    match_in_title_only: true
     selectors:
+      # 列表项选择器
       item: "div.wordGuide"
-      title: "a"
+      # 标题选择器
+      title: "div.bigTit a"
+      # 日期选择器
       date: "p.time"
+      # 页面就绪等待选择器
       wait_for: "div.wordGuide"
+    # 日期提取策略：false=优先使用 date 选择器，不从整条 item 文本解析
     date_from_item: false
     detail_date:
+      # 启用详情页日期解析
       enabled: true
     detail_page:
+      # 启用详情页附件解析
       enabled: true
+      # 详情页抓取方式
       fetch_mode: "playwright"
       title_selectors:
+        # 标题候选（优先 meta，再回退 h1/title）
+        - "meta[name=ArticleTitle]"
         - "h1"
         - "title"
       attachment_selectors:
+        # 附件链接选择器
         - "a[href]"
       attachment_extensions:
+        # 附件后缀白名单
         - "pdf"
         - "doc"
         - "docx"
@@ -77,28 +155,63 @@ site_overrides:
         - "csv"
         - "ppt"
         - "pptx"
+      content_extract:
+        # 启用详情页正文裁剪：仅保留标题、日期、正文
+        enabled: true
+        # 裁剪失败时回退原始整页 HTML，避免丢失内容
+        fallback_to_original_on_empty: true
+        title_selectors:
+          - "div.content-body > h3"
+          - "h1"
+          - "title"
+        date_selectors:
+          - "meta[name=PubDate]"
+          - "meta[name=publishdate]"
+        body_selectors:
+          - "div.content-body"
+        remove_selectors:
+          - "script"
+          - "style"
+          - "div.content-head"
+
+  # -------------------------------- 中国证券业协会 --------------------------------
   "www.sac.net.cn":
+    # 站点适配器类型
     adapter: "playwright"
+    # 搜索地址模板
     search_url: "https://www.sac.net.cn/was5/web/search?channelid=228163&searchword={query}"
+    # 查询词编码方式
     query_encoding: "single"
+    # 列表页抓取方式：该站点可用 requests
     fetch_mode: "requests"
     selectors:
+      # 列表项选择器
       item: "td.searchresult ol li"
+      # 标题选择器
       title: "a"
+      # 日期选择器
       date: "div.pubtime"
+      # 页面就绪等待选择器
       wait_for: "td.searchresult ol li"
+    # 日期提取策略
     date_from_item: false
     detail_date:
+      # 启用详情页日期解析
       enabled: true
     detail_page:
+      # 启用详情页附件解析
       enabled: true
+      # 详情页抓取方式
       fetch_mode: "requests"
       title_selectors:
+        # 标题候选选择器
         - "h1"
         - "title"
       attachment_selectors:
+        # 附件链接选择器
         - "a[href]"
       attachment_extensions:
+        # 附件后缀白名单
         - "pdf"
         - "doc"
         - "docx"
@@ -110,28 +223,64 @@ site_overrides:
         - "csv"
         - "ppt"
         - "pptx"
+      content_extract:
+        # 启用详情页正文裁剪：仅保留标题、日期、正文
+        enabled: true
+        # 裁剪失败时回退原始整页 HTML，避免丢失内容
+        fallback_to_original_on_empty: true
+        title_selectors:
+          - "div.article > h2"
+          - "h1"
+          - "title"
+        date_selectors:
+          - "div.article .info .info_con > span:first-child"
+        body_selectors:
+          - "div.article .zhengwen#zoom .TRS_Editor"
+          - "div.article #zoom .TRS_Editor"
+        remove_selectors:
+          - "script"
+          - "style"
+          - ".top_fole"
+          - ".article_bottom"
+
+  # ----------------------------------- 中国政府网搜索 -----------------------------------
   "sousuo.www.gov.cn":
+    # 站点适配器类型
     adapter: "playwright"
+    # 搜索地址模板
     search_url: "https://sousuo.www.gov.cn/sousuo/search.shtml?code=17da70961a7&dataTypeId=107&searchWord={query}"
+    # 查询词编码方式
     query_encoding: "single"
+    # 列表页抓取方式
     fetch_mode: "playwright"
     selectors:
+      # 列表项选择器
       item: "div.item"
+      # 标题选择器
       title: "a"
+      # 日期选择器
       date: "span.sourceTime"
+      # 页面就绪等待选择器
       wait_for: "div.item"
+    # 日期提取策略
     date_from_item: false
     detail_date:
+      # 启用详情页日期解析
       enabled: true
     detail_page:
+      # 启用详情页附件解析
       enabled: true
+      # 详情页抓取方式
       fetch_mode: "playwright"
       title_selectors:
+        # 标题候选选择器
         - "h1"
         - "title"
       attachment_selectors:
+        # 附件链接选择器
         - "a[href]"
       attachment_extensions:
+        # 附件后缀白名单
         - "pdf"
         - "doc"
         - "docx"
@@ -143,28 +292,63 @@ site_overrides:
         - "csv"
         - "ppt"
         - "pptx"
+      content_extract:
+        # 启用详情页正文裁剪：仅保留标题、日期、正文
+        enabled: true
+        # 裁剪失败时回退原始整页 HTML，避免丢失内容
+        fallback_to_original_on_empty: true
+        title_selectors:
+          - "h1#ti"
+          - "title"
+        date_selectors:
+          - "div.pages-date"
+        body_selectors:
+          - "#UCAP-CONTENT"
+        remove_selectors:
+          - "script"
+          - "style"
+          - "#UCAP-CONTENT-FORPRINT"
+          - ".editor"
+          - ".related"
+
+  # ----------------------------------- 中国政府网主域 -----------------------------------
   "www.gov.cn":
+    # 站点适配器类型
     adapter: "playwright"
+    # 搜索地址模板
     search_url: "https://sousuo.www.gov.cn/sousuo/search.shtml?code=17da70961a7&dataTypeId=107&searchWord={query}"
+    # 查询词编码方式
     query_encoding: "single"
+    # 列表页抓取方式
     fetch_mode: "playwright"
     selectors:
+      # 列表项选择器
       item: "div.item"
+      # 标题选择器
       title: "a"
+      # 日期选择器
       date: "span.sourceTime"
+      # 页面就绪等待选择器
       wait_for: "div.item"
+    # 日期提取策略
     date_from_item: false
     detail_date:
+      # 启用详情页日期解析
       enabled: true
     detail_page:
+      # 启用详情页附件解析
       enabled: true
+      # 详情页抓取方式
       fetch_mode: "playwright"
       title_selectors:
+        # 标题候选选择器
         - "h1"
         - "title"
       attachment_selectors:
+        # 附件链接选择器
         - "a[href]"
       attachment_extensions:
+        # 附件后缀白名单
         - "pdf"
         - "doc"
         - "docx"
@@ -176,3 +360,21 @@ site_overrides:
         - "csv"
         - "ppt"
         - "pptx"
+      content_extract:
+        # 启用详情页正文裁剪：仅保留标题、日期、正文
+        enabled: true
+        # 裁剪失败时回退原始整页 HTML，避免丢失内容
+        fallback_to_original_on_empty: true
+        title_selectors:
+          - "h1#ti"
+          - "title"
+        date_selectors:
+          - "div.pages-date"
+        body_selectors:
+          - "#UCAP-CONTENT"
+        remove_selectors:
+          - "script"
+          - "style"
+          - "#UCAP-CONTENT-FORPRINT"
+          - ".editor"
+          - ".related"
